@@ -388,8 +388,7 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 				return false;
 			}
 				
-			Player player = (Player) sender;
-			parseTownCommand(player, args);
+			parseTownCommand((Player) sender, args);
 		} else
 			try {
 				parseTownCommandForConsole(sender, args);
@@ -400,7 +399,6 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 		return true;
 	}
 
-	@SuppressWarnings("static-access")
 	private void parseTownCommandForConsole(final CommandSender sender, String[] split) throws TownyException {
 
 		if (split.length == 0 || split[0].equalsIgnoreCase("?") || split[0].equalsIgnoreCase("help")) {
@@ -415,19 +413,18 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 			if (town == null)
 				throw new TownyException(Translation.of("msg_err_not_registered_1", split[0]));
 
-			Bukkit.getScheduler().runTaskAsynchronously(this.plugin, () -> TownyMessaging.sendMessage(sender, TownyFormatter.getStatus(town)));
+			Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> TownyMessaging.sendMessage(sender, TownyFormatter.getStatus(town)));
 		}
 
 	}
 
-	@SuppressWarnings("static-access")
 	private void parseTownCommand(final Player player, String[] split) {
 		TownyUniverse townyUniverse = TownyUniverse.getInstance();
 
 		try {
 
 			if (split.length == 0) {
-				Bukkit.getScheduler().runTaskAsynchronously(this.plugin, () -> {
+				Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
 					try {
 						Resident resident = townyUniverse.getDataSource().getResident(player.getName());
 						Town town = resident.getTown();
@@ -468,8 +465,7 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 				if (split.length == 1) {
 					throw new TownyException(Translation.of("msg_specify_name"));
 				} else if (split.length >= 2) {
-					String[] newSplit = StringMgmt.remFirstArg(split);
-					String townName = String.join("_", newSplit);
+					String townName = String.join("_", StringMgmt.remFirstArg(split));
 					
 					newTown(player, townName, player.getName(), noCharge);
 				}
@@ -506,15 +502,15 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 				
 			} else if (split[0].equalsIgnoreCase("plots")) {
 
-				if (TownRuinUtil.isPlayersTownRuined(player))
-					throw new TownyException(Translation.of("msg_err_cannot_use_command_because_town_ruined"));
-
 				if (!townyUniverse.getPermissionSource().testPermission(player, PermissionNodes.TOWNY_COMMAND_TOWN_PLOTS.getNode()))
 					throw new TownyException(Translation.of("msg_err_command_disable"));
 
 				Town town = null;
 				try {
 					if (split.length == 1) {
+						if (TownRuinUtil.isPlayersTownRuined(player))
+							throw new TownyException(Translation.of("msg_err_cannot_use_command_because_town_ruined"));
+
 						town = townyUniverse.getDataSource().getResident(player.getName()).getTown();
 					} else {
 						town = townyUniverse.getTown(split[1]);
@@ -522,11 +518,8 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 				} catch (Exception e) {
 				}
 				
-				if (town == null) {
-					TownyMessaging.sendErrorMsg(player, Translation.of("msg_specify_name"));
-					return;
-				}
-				
+				if (town == null)
+					throw new TownyException(Translation.of("msg_specify_name"));
 
 				townPlots(player, town);
 
@@ -585,86 +578,12 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 					townSpawn(player, newSplit, false, ignoreWarning);
 
 				} else if (split[0].equalsIgnoreCase("outpost")) {
-					if (split.length >= 2) {
-						if (split[1].equalsIgnoreCase("list")) {
-							if (!townyUniverse.getPermissionSource().testPermission(player, PermissionNodes.TOWNY_COMMAND_TOWN_OUTPOST_LIST.getNode())){
-								throw new TownyException(Translation.of("msg_err_command_disable"));
-							}
-							Resident resident = townyUniverse.getDataSource().getResident(player.getName());
-							if (resident.hasTown()){
-								Town town = resident.getTown();
-								List<Location> outposts = town.getAllOutpostSpawns();
-								int page = 1;
-								int total = (int) Math.ceil(((double) outposts.size()) / ((double) 10));
-								if (split.length == 3){
-									try {
-										page = Integer.parseInt(split[2]);
-										if (page < 0) {
-											TownyMessaging.sendErrorMsg(player, Translation.of("msg_err_negative"));
-											return;
-										} else if (page == 0) {
-											TownyMessaging.sendErrorMsg(player, Translation.of("msg_error_must_be_int"));
-											return;
-										}
-									} catch (NumberFormatException e) {
-										TownyMessaging.sendErrorMsg(player, Translation.of("msg_error_must_be_int"));
-										return;
-									}
-								}
-								if (page > total) {
-									TownyMessaging.sendErrorMsg(player, Translation.of("LIST_ERR_NOT_ENOUGH_PAGES", total));
-									return;
-								}
-								int iMax = page * 10;
-								if ((page * 10) > outposts.size()) {
-									iMax = outposts.size();
-								}
-								
-								if (Towny.isSpigot) {
-									TownySpigotMessaging.sendSpigotOutpostList(player, town, page, total);
-									return;
-								}
-								
-								@SuppressWarnings({ "unchecked", "rawtypes" })
-								List<String> outputs = new ArrayList();
-								for (int i = (page - 1) * 10; i < iMax; i++) {
-									Location outpost = outposts.get(i);
-									String output;
-									TownBlock tb = TownyAPI.getInstance().getTownBlock(outpost);
-									if (tb == null)
-										continue;
-									String name = !tb.hasPlotObjectGroup() ? tb.getName() : tb.getPlotObjectGroup().getName();
-									if (!name.equalsIgnoreCase("")) {
-										output = Colors.Gold + (i + 1) + Colors.Gray + " - " + Colors.LightGreen  + name +  Colors.Gray + " - " + Colors.LightBlue + outpost.getWorld().getName() +  Colors.Gray + " - " + Colors.LightBlue + "(" + outpost.getBlockX() + "," + outpost.getBlockZ()+ ")";
-									} else {
-										output = Colors.Gold + (i + 1) + Colors.Gray + " - " + Colors.LightBlue + outpost.getWorld().getName() + Colors.Gray + " - " + Colors.LightBlue + "(" + outpost.getBlockX() + "," + outpost.getBlockZ()+ ")";
-									}
-									outputs.add(output);
-								}
-								player.sendMessage(
-										ChatTools.formatList(
-												Translation.of("outpost_plu"),
-												Colors.Gold + "#" + Colors.Gray + " - " + Colors.LightGreen + "(Plot Name)" + Colors.Gray + " - " + Colors.LightBlue + "(Outpost World)"+ Colors.Gray + " - " + Colors.LightBlue + "(Outpost Location)",
-												outputs,
-												Translation.of("LIST_PAGE", page, total)
-										));
 
-							} else {
-								TownyMessaging.sendErrorMsg(player, Translation.of("msg_err_must_belong_town"));
-							}
-						} else {
-							boolean ignoreWarning = false;
+					/*
+					 * outposts check its own perms. 
+					 */
+					townOutpost(player, split);
 
-							if (split.length == 2) {
-								if (split[1].equals("-ignore")) {
-									ignoreWarning = true;
-								}
-							}
-							townSpawn(player, newSplit, true, ignoreWarning);
-						}
-					} else {
-						townSpawn(player, newSplit, true, false);
-					}
 				} else if (split[0].equalsIgnoreCase("delete")) {
 
 					if (!townyUniverse.getPermissionSource().testPermission(player, PermissionNodes.TOWNY_COMMAND_TOWN_DELETE.getNode()))
@@ -687,10 +606,8 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 					} catch (TownyException e) {
 					}
 					
-					if (town == null) {
-						TownyMessaging.sendErrorMsg(player, Translation.of("msg_specify_name"));
-						return;
-					}
+					if (town == null)
+						throw new TownyException(Translation.of("msg_specify_name"));
 					
 					TownyMessaging.sendMessage(player, TownyFormatter.getFormattedResidents(town));
 
@@ -807,7 +724,7 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 					if (!townyUniverse.getPermissionSource().testPermission(player, PermissionNodes.TOWNY_COMMAND_TOWN_OTHERTOWN.getNode()) && ( (resident.getTown() != town) || (!resident.hasTown()) ) ) {
 						throw new TownyException(Translation.of("msg_err_command_disable"));
 					}
-					Bukkit.getScheduler().runTaskAsynchronously(this.plugin, () -> TownyMessaging.sendMessage(player, TownyFormatter.getStatus(town)));
+					Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> TownyMessaging.sendMessage(player, TownyFormatter.getStatus(town)));
 				}
 			}
 
@@ -3664,4 +3581,86 @@ public class TownCommand extends BaseCommand implements CommandExecutor, TabComp
 		}
 	}
 
+	private static void townOutpost(Player player, String[] args) {
+		
+		try {
+			if (args.length >= 2) {
+				if (args[1].equalsIgnoreCase("list")) {
+					if (!TownyUniverse.getInstance().getPermissionSource().testPermission(player, PermissionNodes.TOWNY_COMMAND_TOWN_OUTPOST_LIST.getNode()))
+						throw new TownyException(Translation.of("msg_err_command_disable"));
+
+					Resident resident = TownyUniverse.getInstance().getDataSource().getResident(player.getName());
+					
+					if (!resident.hasTown())
+						throw new TownyException(Translation.of("msg_err_must_belong_town"));
+					
+					Town town = resident.getTown();
+					List<Location> outposts = town.getAllOutpostSpawns();
+					int page = 1;
+					int total = (int) Math.ceil(((double) outposts.size()) / ((double) 10));
+					if (args.length == 3) {
+						try {
+							page = Integer.parseInt(args[2]);
+							if (page < 0) {
+								throw new TownyException(Translation.of("msg_err_negative"));
+							} else if (page == 0) {
+								throw new TownyException(Translation.of("msg_error_must_be_int"));
+							}
+						} catch (NumberFormatException e) {
+							throw new TownyException(Translation.of("msg_error_must_be_int"));
+						}
+					}
+					if (page > total)
+						throw new TownyException(Translation.of("LIST_ERR_NOT_ENOUGH_PAGES", total));
+
+					int iMax = page * 10;
+					if ((page * 10) > outposts.size())
+						iMax = outposts.size();
+					
+					if (Towny.isSpigot) {
+						TownySpigotMessaging.sendSpigotOutpostList(player, town, page, total);
+						return;
+					}
+					
+					List<String> outputs = new ArrayList();
+					for (int i = (page - 1) * 10; i < iMax; i++) {
+						Location outpost = outposts.get(i);
+						String output;
+						TownBlock tb = TownyAPI.getInstance().getTownBlock(outpost);
+						if (tb == null)
+							continue;
+						String name = !tb.hasPlotObjectGroup() ? tb.getName() : tb.getPlotObjectGroup().getName();
+						if (!name.equalsIgnoreCase("")) {
+							output = Colors.Gold + (i + 1) + Colors.Gray + " - " + Colors.LightGreen  + name +  Colors.Gray + " - " + Colors.LightBlue + outpost.getWorld().getName() +  Colors.Gray + " - " + Colors.LightBlue + "(" + outpost.getBlockX() + "," + outpost.getBlockZ()+ ")";
+						} else {
+							output = Colors.Gold + (i + 1) + Colors.Gray + " - " + Colors.LightBlue + outpost.getWorld().getName() + Colors.Gray + " - " + Colors.LightBlue + "(" + outpost.getBlockX() + "," + outpost.getBlockZ()+ ")";
+						}
+						outputs.add(output);
+					}
+					player.sendMessage(
+							ChatTools.formatList(
+									Translation.of("outpost_plu"),
+									Colors.Gold + "#" + Colors.Gray + " - " + Colors.LightGreen + "(Plot Name)" + Colors.Gray + " - " + Colors.LightBlue + "(Outpost World)"+ Colors.Gray + " - " + Colors.LightBlue + "(Outpost Location)",
+									outputs,
+									Translation.of("LIST_PAGE", page, total)
+							));
+
+				} else {
+					boolean ignoreWarning = false;
+
+					if (args.length == 2) {
+						if (args[1].equals("-ignore")) {
+							ignoreWarning = true;
+						}
+					}
+					townSpawn(player, StringMgmt.remFirstArg(args), true, ignoreWarning);
+				}
+			} else {
+				townSpawn(player, StringMgmt.remFirstArg(args), true, false);
+			}
+		} catch (TownyException e) {
+			TownyMessaging.sendErrorMsg(player, e.getMessage());
+		}
+		
+	}
 }
